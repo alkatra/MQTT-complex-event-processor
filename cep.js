@@ -1,3 +1,9 @@
+//////////////////////////////////////////
+//////////////////////////////////////////
+// CEP.JS ////////////////////////////////
+//////////////////////////////////////////
+//////////////////////////////////////////
+
 const mqtt = require("mqtt");
 const client = mqtt.connect("mqtt://broker.hivemq.com:1883");
 let drones = [];
@@ -14,12 +20,12 @@ client.on("message", (topic, message) => {
     let id = parseInt(levels[1]);
     if (drones[id] === undefined) initializeDrone(id, levels[0]);
 
-    handleStationary(levels[2], drones[id], message);
+    handleStationary(levels[2], drones[id], message, id);
     handleLowBattery(levels[2], message, id);
 
     assign(drones[id], levels[2].toString(), message.toString());
 
-    handleAltitude(levels[2], drones[id]);
+    handleAltitude(levels[2], drones[id], id);
 
     checkForSecondAlert(drones[id], id);
   }
@@ -58,7 +64,7 @@ function checkForSecondAlert(drone, id) {
   }
 }
 
-function handleAltitude(type, drone) {
+function handleAltitude(type, drone, id) {
   if (type == "altitude") {
     if (drone.altitude > 100) {
       if (drone.highAltitude.value == false) {
@@ -66,12 +72,24 @@ function handleAltitude(type, drone) {
         drone.highAltitude.time++;
       } else {
         drone.highAltitude.time++;
+        if (drone.stationary.value) {
+          console.log(
+            "Drone " +
+              id +
+              " is STILL high altitude AND stationary. TIME: " +
+              drone.highAltitude.time +
+              " minutes."
+          );
+        }
       }
+    } else {
+      drone.highAltitude.value = false;
+      drone.highAltitude.time = 0;
     }
   }
 }
 
-function handleStationary(type, drone, newlatlong) {
+function handleStationary(type, drone, newlatlong, id) {
   if (type == "latlong") {
     if (drone.latlong == newlatlong) {
       if (drone.stationary.value == false) {
@@ -80,6 +98,9 @@ function handleStationary(type, drone, newlatlong) {
       } else {
         drone.stationary.time++;
       }
+    } else {
+      drone.stationary.value = false;
+      drone.stationary.time = 0;
     }
   }
 }
@@ -90,17 +111,15 @@ function handleLowBattery(type, message, id) {
     parseInt(message) < 10 &&
     !lowBatteryDrones.includes(id)
   ) {
+    console.log("Drone " + id + " is low on battery.");
     lowBatteryDrones[lowBatteryDrones.length] = id;
     if (lowBatteryDrones.length >= 2) {
-      lowBatteryDrones[lowBatteryDrones.length] = id;
-      if (lowBatteryDrones.length >= 2) {
-        let topic = "/drones/alerts";
-        let message =
-          "ALERT: " +
-          lowBatteryDrones.length +
-          " drones are low on battery (<10)!";
-        client.publish(topic, message);
-      }
+      let topic = "/drones/alerts";
+      let message =
+        "ALERT: " +
+        lowBatteryDrones.length +
+        " drones are low on battery (<10)!";
+      client.publish(topic, message);
     }
   }
 }
